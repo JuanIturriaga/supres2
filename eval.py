@@ -14,7 +14,12 @@ def evaluate_metrics(original_images, test_images, metrics_list=['mssim', 'psnr'
         image_metrics = []
         for metric in metrics_list:
             if metric == 'mssim':
-                image_metrics.append(mssim(np.squeeze(orig), np.squeeze(test), channel_axis=-1))
+                # conciderar imágenes en escala de grises o color 
+                if orig.ndim == 2 or orig.shape[2] == 1:
+                    image_metrics.append(mssim(np.squeeze(orig), np.squeeze(test)))
+                else:
+                    # ver como funciona ssim en imágenes a color !!!!!! 
+                    image_metrics.append(mssim(np.squeeze(orig), np.squeeze(test), channel_axis=-1))
             elif metric == 'psnr':
                 image_metrics.append(psnr(orig, test))
             elif metric == 'r2':
@@ -41,12 +46,15 @@ if __name__ == "__main__":
     print (f"Original Image Shape: {original_image.shape}")
     print (f"Test Image Shape: {test_image.shape}")
     
+    #normalizar imágenes a rango [0, 1]
+    #original_image = original_image / 255.0
+    #test_image = test_image / 255.0
+    
     # Redimensionar imágenes si es necesario
     original_image_resized = resize_image(original_image, size[0], size[1], interpolation='bilinear')
     test_image_resized = resize_image(test_image, size[0]//factor, size[1]//factor, interpolation='bilinear')
-    test_image_resized = resize_image(test_image_resized, size[0], size[1], interpolation='bilinear')
+    test_image_resized = resize_image(test_image_resized, size[0], size[1], interpolation='bicubic')
     
-
     # Evaluar métricas
     metrics_list=['mssim', 'psnr', 'mse', 'rmse', 'r2']
     metrics = evaluate_metrics([original_image_resized], [test_image_resized], metrics_list=metrics_list)
