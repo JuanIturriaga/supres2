@@ -1,0 +1,20 @@
+# Motor de Deep Learning
+tensorflow<2.11
+
+# Procesamiento de Imágenes y Datos
+numpy<1.24.0  # CRÍTICO: NumPy 1.24+ y 2.0 rompen TensorFlow 2.10
+pillow<11.0.0
+opencv-contrib-python>=4.6.0
+scikit-image<0.22.0
+scikit-learn<1.4.0
+
+# Utilidades y Visualización
+matplotlib<3.9.0
+tqdm>=4.64.0
+h5py<3.9.0     # TF usa h5py para guardar/cargar modelos (.h5)
+
+# Opcional: Para manejo de datasets grandes
+pandas<2.2.0
+
+# Auxiliar: datos gpu
+gputil
