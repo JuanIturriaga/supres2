@@ -51,17 +51,29 @@ if __name__ == "__main__":
     #test_image = test_image / 255.0
     
     # Redimensionar imágenes si es necesario
-    original_image_resized = resize_image(original_image, size[0], size[1], interpolation='bilinear')
-    test_image_resized = resize_image(test_image, size[0]//factor, size[1]//factor, interpolation='bilinear')
-    test_image_resized = resize_image(test_image_resized, size[0], size[1], interpolation='bicubic')
+    original_image_resized = resize_image(original_image, size[0], size[1], interpolation='bicubic')
+    test_image_resized = resize_image(test_image, size[0]//factor, size[1]//factor, interpolation='bicubic')
+    test_image_bicubic = resize_image(test_image_resized, size[0], size[1], interpolation='bicubic')
+    test_image_bilineal = resize_image(test_image_resized, size[0], size[1], interpolation='bilinear')
+    test_image_nearest = resize_image(test_image_resized, size[0], size[1], interpolation='nearest')
     
     # Evaluar métricas
     metrics_list=['mssim', 'psnr', 'mse', 'rmse', 'r2']
-    metrics = evaluate_metrics([original_image_resized], [test_image_resized], metrics_list=metrics_list)
+    metrics_bicubic = evaluate_metrics([original_image_resized], [test_image_bicubic], metrics_list=metrics_list)
+    metrics_bilineal = evaluate_metrics([original_image_resized], [test_image_bilineal], metrics_list=metrics_list)
+    metrics_nearest = evaluate_metrics([original_image_resized], [test_image_nearest], metrics_list=metrics_list)
     
     #crear dataframe pandas con las metricas y sus valores
     import pandas as pd
-    metrics_df = pd.DataFrame(metrics, columns=metrics_list)
+    cols = ['interpol'] + metrics_list
+    
+    metrics_df = pd.DataFrame(columns=metrics_list)
+    metrics_df.loc['bicubic'] = metrics_bicubic[0]
+    metrics_df.loc['bilineal'] = metrics_bilineal[0]
+    metrics_df.loc['nearest'] = metrics_nearest[0]
+    
+    
+    
     #print pandas dataframe
     print(metrics_df)
     
