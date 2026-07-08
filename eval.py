@@ -15,11 +15,12 @@ def evaluate_metrics(original_images, test_images, metrics_list=['mssim', 'psnr'
         for metric in metrics_list:
             if metric == 'mssim':
                 # conciderar imágenes en escala de grises o color 
-                if orig.ndim == 2 or orig.shape[2] == 1:
-                    image_metrics.append(mssim(np.squeeze(orig), np.squeeze(test)))
-                else:
+                image_metrics.append(mssim(np.squeeze(orig), np.squeeze(test)))
+                #if orig.ndim == 2 or orig.shape[2] == 1:
+                #    image_metrics.append(mssim(np.squeeze(orig), np.squeeze(test)))
+                #else:
                     # ver como funciona ssim en imágenes a color !!!!!! 
-                    image_metrics.append(mssim(np.squeeze(orig), np.squeeze(test), channel_axis=-1))
+                #    image_metrics.append(mssim(np.squeeze(orig), np.squeeze(test), channel_axis=-1))
             elif metric == 'psnr':
                 image_metrics.append(psnr(orig, test))
             elif metric == 'r2':
@@ -33,12 +34,12 @@ def evaluate_metrics(original_images, test_images, metrics_list=['mssim', 'psnr'
     return metrics
 
 
-from img import load_image, resize_image
+from img import image_load, image_resize
 
 if __name__ == "__main__":
     # Cargar imágenes originales y de prueba
-    original_image = load_image(".\\ds\\ds_xray_1024\\images_001\\images\\00000001_000.png", mode='grayscale')
-    test_image = load_image(".\\ds\\ds_xray_1024\\images_001\\images\\00000001_001.png", mode='grayscale')
+    original_image = image_load(".\\ds\\ds_xray_1024\\images_001\\images\\00000001_000.png", mode='color')
+    test_image = image_load(".\\ds\\ds_xray_1024\\images_001\\images\\00000001_001.png", mode='color')
     
     size = (254, 254)  # Tamaño de prueba para redimensionar las imágenes
     factor = 2  # Factor de reducción para la imagen de prueba
@@ -51,11 +52,11 @@ if __name__ == "__main__":
     #test_image = test_image / 255.0
     
     # Redimensionar imágenes si es necesario
-    original_image_resized = resize_image(original_image, size[0], size[1], interpolation='bicubic')
-    test_image_resized = resize_image(test_image, size[0]//factor, size[1]//factor, interpolation='bicubic')
-    test_image_bicubic = resize_image(test_image_resized, size[0], size[1], interpolation='bicubic')
-    test_image_bilineal = resize_image(test_image_resized, size[0], size[1], interpolation='bilinear')
-    test_image_nearest = resize_image(test_image_resized, size[0], size[1], interpolation='nearest')
+    original_image_resized = image_resize(original_image, size[0], size[1], interpolation='bicubic')
+    test_image_resized = image_resize(test_image, size[0]//factor, size[1]//factor, interpolation='bicubic')
+    test_image_bicubic = image_resize(test_image_resized, size[0], size[1], interpolation='bicubic')
+    test_image_bilineal = image_resize(test_image_resized, size[0], size[1], interpolation='bilinear')
+    test_image_nearest = image_resize(test_image_resized, size[0], size[1], interpolation='nearest')
     
     # Evaluar métricas
     metrics_list=['mssim', 'psnr', 'mse', 'rmse', 'r2']

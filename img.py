@@ -1,6 +1,6 @@
 import cv2 as cv
 
-def load_image(path, mode='color'):
+def image_load(path, mode='color'):
     #cargar una imagen desde un archivo
     map = {
         'color': cv.IMREAD_COLOR,
@@ -9,7 +9,7 @@ def load_image(path, mode='color'):
     }
     return cv.imread(path, map.get(mode, cv.IMREAD_COLOR))
 
-def resize_image(image, width, height, interpolation='bilinear'):
+def image_resize(image, width, height, interpolation='bilinear'):
     #redimensionar una imagen a un tamaño específico
     map = {
         'bilinear': cv.INTER_LINEAR,
@@ -24,9 +24,9 @@ def resize_image(image, width, height, interpolation='bilinear'):
     return cv.resize(image, (width, height), interpolation=interpolation_value)
 
 if __name__ == "__main__":
-    image = load_image(".\\ds\\ds_xray_1024\\images_001\\images\\00000001_000.png")
+    image = image_load(".\\ds\\ds_xray_1024\\images_001\\images\\00000001_000.png")
     print(f"Original Image Shape: {image.shape}")
-    resized_image = resize_image(image, 200, 200, interpolation='bicubic')
+    resized_image = image_resize(image, 200, 200, interpolation='bicubic')
     cv.imshow("Resized Image", resized_image)
     cv.waitKey(0)
     cv.destroyAllWindows()
