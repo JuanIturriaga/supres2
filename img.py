@@ -1,4 +1,6 @@
 import cv2 as cv
+import numpy as np
+import os
 
 def image_load(path, mode='color'):
     #cargar una imagen desde un archivo
@@ -8,6 +10,30 @@ def image_load(path, mode='color'):
         'unchanged': cv.IMREAD_UNCHANGED
     }
     return cv.imread(path, map.get(mode, cv.IMREAD_COLOR))
+
+def images_load (folder_path, mode='color', extensions=['.png', '.jpg', '.jpeg'], recursive=False, max_images=None):
+    #cargar todas las imagenes de una carpeta
+    images = []
+    if recursive:
+        for root, _, files in os.walk(folder_path):
+            for filename in files:
+                if any(filename.endswith(ext) for ext in extensions):
+                    img = image_load(os.path.join(root, filename), mode)
+                    if img is not None:
+                        images.append(img)
+                        if max_images is not None and len(images) >= max_images:
+                            break
+            if max_images is not None and len(images) >= max_images:
+                break
+    else:
+        for filename in os.listdir(folder_path):
+            if any(filename.endswith(ext) for ext in extensions):
+                img = image_load(os.path.join(folder_path, filename), mode)
+                if img is not None:
+                    images.append(img)
+                    if max_images is not None and len(images) >= max_images:
+                        break
+    return np.array(images)
 
 def image_resize(image, width, height, interpolation='bilinear'):
     #redimensionar una imagen a un tamaño específico
@@ -22,6 +48,10 @@ def image_resize(image, width, height, interpolation='bilinear'):
     if interpolation_value is None:
         raise ValueError(f"Invalid interpolation method: {interpolation}")
     return cv.resize(image, (width, height), interpolation=interpolation_value)
+
+def images_resize(images, width, height, interpolation='bilinear'):
+    #redimensionar una lista de imagenes a un tamaño específico
+    return [image_resize(image, width, height, interpolation) for image in images]
 
 if __name__ == "__main__":
     image = image_load(".\\ds\\ds_xray_1024\\images_001\\images\\00000001_000.png")
