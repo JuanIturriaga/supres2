@@ -17,6 +17,27 @@ from img_gen import img_random_textures, img_random_shapes
 def dataset_load(params, verbose=False):
     path = params.get('dataset_path', None)
     max_images = params.get('dataset_count', None)
+    
+    dataset_shape = params.get('dataset_shape', None)
+    if dataset_shape is not None:
+        dim = (dataset_shape[0], dataset_shape[1])
+        if dataset_shape[2] == 3:
+            mode = 'color'
+        elif dataset_shape[2] == 1:
+            mode = 'grayscale'
+        else:
+            raise ValueError(f"Invalid dataset_shape: {dataset_shape}. The third dimension must be 1 or 3.")
+    else:
+        output_size = params.get('output_size', -1)
+        dim = (output_size, output_size)
+        output_channels = params.get('output_channels', 3)
+        if output_channels == 3:
+            mode = 'color'  # Default mode if dataset_shape is not provided
+        elif output_channels == 1:
+            mode = 'grayscale'
+        else:
+            raise ValueError(f"Invalid output_channels: {output_channels}. Must be 1 or 3.")        
+    
     output_size = params.get('output_size', -1)
     dim = (output_size, output_size)
     
