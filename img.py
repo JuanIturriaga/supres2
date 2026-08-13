@@ -57,6 +57,10 @@ def image_resize(image, width, height, interpolation='bilinear'):
         raise ValueError(f"Invalid interpolation method: {interpolation}")
     return cv.resize(image, (width, height), interpolation=interpolation_value)
 
+def image_blur(image, kernel_size=5):
+    #aplicar un blur gaussiano a una imagen
+    return cv.GaussianBlur(image, (kernel_size, kernel_size), 0)
+
 def images_resize(images, width, height, interpolation='bilinear'):
     #redimensionar una lista de imagenes a un tamaño específico
     return [image_resize(image, width, height, interpolation) for image in images]
