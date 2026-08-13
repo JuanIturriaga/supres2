@@ -11,7 +11,7 @@ def image_load(path, mode='color'):
     }
     return cv.imread(path, map.get(mode, cv.IMREAD_COLOR))
 
-def images_load (folder_path, mode='color', extensions=['.png', '.jpg', '.jpeg'], recursive=False, max_images=None):
+def images_load (folder_path, mode='color', extensions=['.png', '.jpg', '.jpeg'], recursive=False, max_images=None, verbose=False):
     #cargar todas las imagenes de una carpeta
     images = []
     if recursive:
@@ -33,6 +33,9 @@ def images_load (folder_path, mode='color', extensions=['.png', '.jpg', '.jpeg']
                     images.append(img)
                     if max_images is not None and len(images) >= max_images:
                         break
+    if verbose:
+        print(f"Cargadas {len(images)} imágenes desde {folder_path}")
+        
     return np.array(images)
 
 def image_resize(image, width, height, interpolation='bilinear'):
