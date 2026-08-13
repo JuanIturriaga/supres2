@@ -4,7 +4,8 @@ Carga o crea data sets en base a parámetros indicados en un diccionario de conf
 {
     "dataset_path": "ds/xray500",
     "dataset_gen": "random_textures",
-    "dataset_count": 500
+    "dataset_count": 500, 
+    "output_size": 128,
 }
 
 '''
@@ -16,6 +17,8 @@ from img_gen import img_random_textures, img_random_shapes
 def dataset_load(params, verbose=False):
     path = params.get('dataset_path', None)
     max_images = params.get('dataset_count', None)
+    output_size = params.get('output_size', -1)
+    dim = (output_size, output_size)
     
     if max_images < 0:
         max_images = None  # Si se pasa un valor negativo, se cargan todas las imágenes
@@ -23,7 +26,7 @@ def dataset_load(params, verbose=False):
     if path is None:
         raise ValueError("El parámetro 'dataset_path' es obligatorio.")
     
-    images = images_load(path, max_images=max_images, verbose=verbose)
+    images = images_load(path, max_images=max_images, dim=dim, verbose=verbose)
     return images
 
 def dataset_random_textures(params, verbose=False):
@@ -97,7 +100,8 @@ def dataset_factory (params, verbose=False):
     if dataset_func is None:
         raise ValueError(f"Función de dataset no encontrada para el gen: {dataset_gen}")
     
-    images = dataset_func(params, verbose=verbose)
+    images = dataset_func(params, verbose=verbose)   
+    
     
     if verbose:
         print(f"Dataset cargado/creado con formato {images[0].shape} y {len(images)} imágenes.")

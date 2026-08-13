@@ -11,16 +11,19 @@ def image_load(path, mode='color'):
     }
     return cv.imread(path, map.get(mode, cv.IMREAD_COLOR))
 
-def images_load (folder_path, mode='color', extensions=['.png', '.jpg', '.jpeg'], recursive=False, max_images=None, verbose=False):
+def images_load (folder_path, mode='color', extensions=['.png', '.jpg', '.jpeg'], recursive=False, max_images=None, dim = (-1,-1), verbose=False):
     #cargar todas las imagenes de una carpeta
+    
     images = []
     if recursive:
         for root, _, files in os.walk(folder_path):
             for filename in files:
                 if any(filename.endswith(ext) for ext in extensions):
                     img = image_load(os.path.join(root, filename), mode)
+                    if dim != (-1,-1):
+                        img = image_resize(img, dim[0], dim[1], interpolation='bicubic')
                     if img is not None:
-                        images.append(img)
+                        images.append(img)                        
                         if max_images is not None and len(images) >= max_images:
                             break
             if max_images is not None and len(images) >= max_images:
@@ -29,6 +32,8 @@ def images_load (folder_path, mode='color', extensions=['.png', '.jpg', '.jpeg']
         for filename in os.listdir(folder_path):
             if any(filename.endswith(ext) for ext in extensions):
                 img = image_load(os.path.join(folder_path, filename), mode)
+                if dim != (-1,-1):
+                    img = image_resize(img, dim[0], dim[1], interpolation='bicubic')
                 if img is not None:
                     images.append(img)
                     if max_images is not None and len(images) >= max_images:
