@@ -11,8 +11,8 @@ Los parámetros se pasan en un diccionario, por ejemplo:
     "model_file_": "Si se especifica, se carga el modelo desde este archivo y se ignoran los parámetros de arquitectura.",
     "model_architecture_": "Si se especifica, se crea un nuevo modelo con esta arquitectura. Por ejemplo, 'autoencoder_64to128' o 'autoencoder_32to64'.",
     "model_architecture": "conv0",
-    "model_input_size": 64,
-    "model_input_channels": 3,
+    "input_size": 64,
+    "input_channels": 3,
     "optimizer": "adam",
     "learning_rate": 0.0001,
     "loss_function": "MSE",
@@ -148,8 +148,8 @@ model_architectures = {
 
 def models_factory (params, verbose=False):    
     
-    model_input_size = params.get('model_input_size', 14)
-    model_input_channels = params.get('model_input_channels', 3)
+    model_input_size = params.get('input_size', 14)
+    model_input_channels = params.get('input_channels', 3)
     model_input_shape = (model_input_size, model_input_size, model_input_channels)
     params['model_input_shape'] = model_input_shape    
     

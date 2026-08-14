@@ -9,7 +9,7 @@
 import tensorflow as tf
 from tensorflow.keras.utils import Sequence
 import numpy as np
-from img import image_resize, image_blur
+from img import images_resize, images_blur
 
 # AUX: clase iteradora para evitar problema de memoria
 class DatasetIterator(Sequence):
@@ -47,29 +47,25 @@ def generate_input(params, dataset_output):
     #No se utiliza la GPU por problemas de memoria
     with tf.device('/CPU:0'):
         if input_size != output_size:
-            print(f"Redimensionando imágenes de entrenamiento y prueba a {input_size}x{input_size} para crear inputs de baja resolución...")
             method = params.get('input_interpolation_method', 'bicubic')
             #dataset_input = tf.image.resize(y_train, (input_size, input_size), method=method).numpy()
-            dataset_input = image_resize (dataset_output, input_size, input_size, interpolation=method)            
+            dataset_input = images_resize (dataset_output, input_size, input_size, interpolation=method)            
             
         else:
             #hacer un blur gassiano para simular baja resolución
             method = params.get('input_blur_kernel_size', 5)
-            print(f"Aplicando blur gaussiano a imágenes de entrenamiento y prueba para simular baja resolución...")
             #dataset_input = tf.nn.avg_pool2d(dataset_output, ksize=2, strides=1, padding='SAME').numpy()
-            dataset_input = image_blur(dataset_output, kernel_size=method)
+            dataset_input = images_blur(dataset_output, kernel_size=method)
 
     return dataset_input
-    
-
-
+  
 
 def train_supres_model(params, model, dataset, verbose=False):
     """
     Entrena el modelo con los datos de entrenamiento y validación proporcionados.
     
     Args:
-        model: Modelo de Keras a entrenar.
+        model: Modelo de Keras de supres a entrenar.
         dataset: Conjunto de datos completo (imágenes tamaño completo). Se dividirá en entrenamiento y validación según el ratio especificado en params.
         params: Diccionario con parámetros de entrenamiento (batch_size, epochs, etc.).
         verbose: Booleano para imprimir información adicional durante el entrenamiento.
@@ -78,30 +74,39 @@ def train_supres_model(params, model, dataset, verbose=False):
         history: Objeto History que contiene información sobre el entrenamiento.
     """
     
+    # Baraja el dataset con imágenes de alta resolución
     shuffle = params.get('train_shuffle', False)
     if shuffle:
         np.random.shuffle(dataset)
-    
+        
+    # Divide el dataset en entrenamiento y validación
     ratio = params.get('train_ratio', 0.8)
     y_train = dataset[:int(len(dataset) * ratio)]
     y_val = dataset[int(len(dataset) * ratio):]
     
+    # Genera los datos de entrada a partir de las imágenes de alta resolución
+    # Reduce el tamaño al tamaño del input o si el input es igual al output lo blurea para simular baja resolución
     x_train = generate_input(params, y_train)
     x_val = generate_input(params, y_val)
     
+    # Normaliza los datos de entrada y salida a [0, 1] para el entrenamiento
+    x_train = x_train / 255.0
+    y_train = y_train / 255.0
+    x_val = x_val / 255.0
+    y_val = y_val / 255.0    
+    
+    # Configura los parámetros de entrenamiento
     batch_size = params.get('train_batch_size', 32)
     epochs = params.get('train_epochs', 10)
-    
-    #partir el dataset en entrenamiento y validación si no se proporcionan datos de validación
-    if isinstance(dataset, tuple) and len(dataset) == 2:
-        train_data, val_data = dataset
-    else:
-        split_index = int(len(dataset) * ratio)
-        train_data = dataset[:split_index]
-        val_data = dataset[split_index:]
-        
+
+    # Crea los iteradores para no subir todo a la memoria de la GPU
     train_gen = DatasetIterator(x_train, y_train, batch_size)
     val_gen = DatasetIterator(x_val, y_val, batch_size)
+    
+    # Entrena el modelo
+    if verbose:
+        print(f"Entrenando el modelo con {len(x_train)} imágenes de entrenamiento y {len(x_val)} imágenes de validación...")
+        print(f"Batch size: {batch_size}, Epochs: {epochs}")        
     
     history = model.fit(
         train_gen,

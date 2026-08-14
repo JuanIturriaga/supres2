@@ -57,18 +57,22 @@ def image_resize(image, width, height, interpolation='bilinear'):
         raise ValueError(f"Invalid interpolation method: {interpolation}")
     return cv.resize(image, (width, height), interpolation=interpolation_value)
 
+def images_resize(images, width, height, interpolation='bilinear'):
+    #redimensionar una lista de imagenes a un tamaño específico
+    return np.array([image_resize(image, width, height, interpolation) for image in images])
+
 def image_blur(image, kernel_size=5):
     #aplicar un blur gaussiano a una imagen
     return cv.GaussianBlur(image, (kernel_size, kernel_size), 0)
 
-def images_resize(images, width, height, interpolation='bilinear'):
-    #redimensionar una lista de imagenes a un tamaño específico
-    return [image_resize(image, width, height, interpolation) for image in images]
+def images_blur(images, kernel_size=5):
+    #aplicar un blur gaussiano a una lista de imagenes
+    return np.array([image_blur(image, kernel_size) for image in images])
 
 if __name__ == "__main__":
     image = image_load(".\\ds\\ds_xray_1024\\images_001\\images\\00000001_000.png")
     print(f"Original Image Shape: {image.shape}")
-    resized_image = image_resize(image, 200, 200, interpolation='bicubic')
+    resized_image = image_resize(image, 32, 32, interpolation='bicubic')
     cv.imshow("Resized Image", resized_image)
     cv.waitKey(0)
     cv.destroyAllWindows()

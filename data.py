@@ -53,11 +53,9 @@ def dataset_load(params, verbose=False):
 def dataset_random_textures(params, verbose=False):
     count = params.get('dataset_count', 100)
     
-    shape = params.get('dataset_shape', None)
-    if shape is None:
-        output_size = params.get('output_size', 128)
-        shape = (output_size, output_size, 3)
-    
+    channels = params.get('input_channels', 3)
+    size = params.get('output_size', 128)
+    shape = (size, size, channels)    
     
     texture_count = params.get('dataset_texture_count', 10)
     
@@ -76,11 +74,13 @@ def dataset_random_textures(params, verbose=False):
 def dataset_random_shapes(params, verbose=False):
     count = params.get('dataset_count', 100)
     
-    shape = params.get('dataset_shape', None)
-    if shape is None:
-        output_size = params.get('output_size', 128)
-        shape = (output_size, output_size, 3)
+    channels = params.get('input_channels', 3)
+    size = params.get('output_size', 128)
+    shape = (size, size, channels)
     
+    if size < 32:
+        raise ValueError("ERROR: no es posible generar imágenes con formas aleatorias menores a 32x32 píxeles. Verificar el parámetro output_size en el diccionario de configuración.")
+
     shape_count = params.get('dataset_shape_count', 10)
     
     images = []
@@ -115,11 +115,23 @@ def dataset_factory (params, verbose=False):
         images (numpy): lista de imágenes cargadas o creadas.
     '''
     
-    dataset_gen = params.get('dataset_gen', 'load')
-    dataset_func = dataset_fuctions.get(dataset_gen, None)
-    
+    # Print de los parametros que utiliza
+    if verbose:
+        print("Creación del dataset, parámetros:")
+        print(f"  dataset_type: {params.get('dataset_type', 'load')}")
+        print(f"  dataset_path: {params.get('dataset_path', None)}")
+        print(f"  dataset_count: {params.get('dataset_count', None)}")
+        print(f"  dataset_texture_count: {params.get('dataset_texture_count', None)}")
+        print(f"  dataset_shape_count: {params.get('dataset_shape_count', None)}")
+        print(f"  output_size: {params.get('output_size', None)}")
+        print(f"  input_channels: {params.get('input_channels', None)}")
+        
+        
+    dataset_type = params.get('dataset_type', 'load')
+    dataset_func = dataset_fuctions.get(dataset_type, None)
+
     if dataset_func is None:
-        raise ValueError(f"Función de dataset no encontrada para el gen: {dataset_gen}")
+        raise ValueError(f"Función de dataset no encontrada para el tipo: {dataset_type}")
     
     images = dataset_func(params, verbose=verbose)   
     
@@ -135,9 +147,10 @@ if __name__ == "__main__":
     # Ejemplo de uso
     params = {
         "dataset_path": "./ds/ds_xray_1024/images_001/images",
-        "dataset_gen": "random_shapes",
+        "dataset_type": "random_textures",
         "dataset_count": 3,
-        "output_size": 512,
+        "output_size": 28,
+        "input_channels": 3,
         "dataset_texture_count": 4,
         "dataset_shape_count": 40
     }

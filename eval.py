@@ -70,26 +70,34 @@ def evaluate_metrics(original_images, test_images, metrics_list=['mssim', 'psnr'
 
 # run python eval.py for testing
 from img import images_load, images_resize
+from img_gen import img_random_shapes
 import pandas as pd
 import numpy as np
+
 
 if __name__ == "__main__":
     
     # Define the path to the folder containing the images and the number of images to load
-    path = ".\\ds\\ds_xray_1024\\images_001\\images"
-    count = 1000
+    path = ".\\ds\\random_shapes_64"
+    count = 100
     print (f"Loading {count} images from {path}")    
         
     #Define el tamáño de las imágenes y el factor de reducción
-    size = (1024, 1024)  # Tamaño de prueba para redimensionar las imágenes
+    size = (64, 64)  # Tamaño de prueba para redimensionar las imágenes
     factor = 2  # Factor de reducción para la imagen de prueba        
     print (f"Image Size: {size}, Reduction Factor: {factor}")
+    shape = (size[0], size[1], 3)
     
     # Carga las imágenes originales de una carpeta específica
     original_image = images_load(path, mode='color', max_images=count)
+    # original_image = img_random_shapes(shape)
+    
+    ratio = 0.8
+    y_train = original_image[:int(len(original_image) * ratio)]
+    y_val = original_image[int(len(original_image) * ratio):]
         
     # Redimensiona las imágenes originales y las de prueba según el factor de reducción
-    original_image_resized = images_resize(original_image, size[0], size[1], interpolation='bicubic')
+    original_image_resized = images_resize(y_val, size[0], size[1], interpolation='bicubic')
     test_image_resized = images_resize(original_image_resized, size[0]//factor, size[1]//factor, interpolation='bicubic')
     
     # Imprime la forma de la primer imagen de cada arreglo
