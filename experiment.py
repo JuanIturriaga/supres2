@@ -91,8 +91,8 @@ if __name__ == "__main__":
     # Ejemplo de uso de la función experiment_supres_basico
     params = {
         'dataset_type': 'load',
-        'dataset_path': './ds/random_shapes_64',
-        'dataset_count': 100,
+        'dataset_path': './ds/ds_xray_1024',
+        'dataset_count': 10000,
         'model_architecture': 'conv0',
         'optimizer': 'adam',
         'learning_rate': 0.001,
@@ -101,9 +101,9 @@ if __name__ == "__main__":
         'train_batch_size': 32,
         'train_epochs': 20,
         'train_ratio': 0.8,
-        'input_size': 32,
+        'input_size': 128,
         'input_channels': 3,
-        'output_size': 64,
+        'output_size': 256,
         'input_interpolation_method': 'bicubic'
     }
     

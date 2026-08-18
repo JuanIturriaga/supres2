@@ -47,7 +47,7 @@ def dataset_load(params, verbose=False):
     if path is None:
         raise ValueError("El parámetro 'dataset_path' es obligatorio.")
     
-    images = images_load(path, max_images=max_images, dim=dim, verbose=verbose)
+    images = images_load(path, max_images=max_images, recursive=True, dim=dim, verbose=verbose)
     return images
 
 def dataset_random_textures(params, verbose=False):

@@ -78,8 +78,8 @@ import numpy as np
 if __name__ == "__main__":
     
     # Define the path to the folder containing the images and the number of images to load
-    path = ".\\ds\\random_shapes_64"
-    count = 100
+    path = ".\\ds\\ds_xray_1024"
+    count = 10000
     print (f"Loading {count} images from {path}")    
         
     #Define el tamáño de las imágenes y el factor de reducción
@@ -89,7 +89,7 @@ if __name__ == "__main__":
     shape = (size[0], size[1], 3)
     
     # Carga las imágenes originales de una carpeta específica
-    original_image = images_load(path, mode='color', max_images=count)
+    original_image = images_load(path, mode='color', recursive=True, max_images=count)
     # original_image = img_random_shapes(shape)
     
     ratio = 0.8
