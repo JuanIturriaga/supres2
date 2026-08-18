@@ -69,6 +69,17 @@ def images_blur(images, kernel_size=5):
     #aplicar un blur gaussiano a una lista de imagenes
     return np.array([image_blur(image, kernel_size) for image in images])
 
+def image_map_compare (img_orginal, img_test, method='diff'):
+    #compara dos imagenes y devuelve una imagen con la diferencia
+    if method == 'diff':
+        return cv.absdiff(img_orginal, img_test)
+    elif method == 'sub':
+        return cv.subtract(img_orginal, img_test)
+    elif method == 'add':
+        return cv.add(img_orginal, img_test)
+    else:
+        raise ValueError(f"Invalid comparison method: {method}")
+
 if __name__ == "__main__":
     image = image_load(".\\ds\\ds_xray_1024\\images_001\\images\\00000001_000.png")
     print(f"Original Image Shape: {image.shape}")
