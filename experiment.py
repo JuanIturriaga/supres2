@@ -6,12 +6,85 @@ Los paso básicos son:
     PASO 3: Entrenamiento del modelo (entrenar el modelo con los datos de entrenamiento y validación)
     PASO 4: Evaluación del modelo (evaluar el modelo con los datos de prueba y calcular métricas)
 """
+import os
+
 from data import dataset_factory
 from models import models_factory
 from train import train_supres_model
 from eval import evaluate_metrics
-from img import images_resize
+from img import images_resize, images_save
+from img_ssim_map import ssim_maps_calculate, images_ssim_map
 import numpy as np
+import os
+import csv
+
+def experiment_setup (params, verbose=False):
+    """Escanea la carpeta de resultados buscando un nuevo id para el experimento
+
+    Args:
+        params (diccionario): debe incluir los paráemtros del experimento
+        verbose (bool, optional): Imprimir por consola resultados. Defaults to False.
+    
+    Returns:
+        str: experiment_id (str)
+    """
+       
+    output_folder = params.get('experiment_output_folder', './results')
+    tag = params.get('experiment_tag', 'supres')
+    
+    if not os.path.exists(output_folder):
+        os.makedirs(output_folder)
+        print(f"Creando carpeta de resultados: {output_folder}")
+    
+    num = 0
+    flag = True
+    while flag:
+        experiment_id = f"{tag}_{num:06d}"
+        experiment_folder = os.path.join(output_folder, experiment_id)
+        if not os.path.exists(experiment_folder):
+            flag = False
+            os.makedirs(experiment_folder)
+            print(f"ID EXPERIMENTO: {experiment_id}")
+            print(f"Creando carpeta de resultados del experimento: {experiment_folder}")
+        else:
+            num += 1                        
+            
+    return experiment_id
+
+def experiment_resize(inputs_set, width, height, method='bilinear'):
+    """
+    Redimensiona un conjunto de imágenes a un tamaño específico utilizando un método de interpolación dado.
+    !!!! Pensado para agregar más métodos de redimencionamiento en el futuro, 
+    !!!! por ejemplo uso de un modelo de super resolución preentrenado para redimensionar las imágenes.
+
+    Args:
+        inputs_set (numpy array): Conjunto de imágenes a redimensionar.
+        width (int): Ancho deseado para las imágenes redimensionadas.
+        height (int): Alto deseado para las imágenes redimensionadas.
+        method (str, optional): Método de interpolación a utilizar. Puede ser 'bilinear', 'nearest', 'bicubic', 'area' o 'lanc'. Defaults to 'bilinear'.
+
+    Returns:
+        numpy array: Conjunto de imágenes redimensionadas.
+    """
+        
+    resized_set = images_resize(inputs_set, width, height, interpolation=method)
+    return resized_set
+
+def metrics_to_csv(results, metrics_list, filename, path= './'):
+    """
+    Guardar resultados de métricas en un archivo csv
+
+    Args:
+        results (lista de listas): Resultados de las métricas para cada imagen. (una imágen por fila, cada métrica en una columna)
+        metrics_list (lista de str): Nombres de las métricas.
+        filename (str): Nombre del archivo CSV donde se guardarán los resultados.
+        path (str, optional): Carpeta donde se guardará el archivo CSV. Defaults to './'.
+    """    
+    with open(os.path.join(path, filename), mode='w', newline='') as file:
+        writer = csv.writer(file)
+        writer.writerow(['image_index'] + metrics_list)
+        for i, result in enumerate(results):
+            writer.writerow([i] + result)
 
 def experiment_supres_basico (params, verbose=False):
     """
@@ -24,6 +97,11 @@ def experiment_supres_basico (params, verbose=False):
     Returns:
         dict: Diccionario con los resultados del experimento, incluyendo métricas de evaluación.
     """
+    
+    # PASO 0: Preparación del experimento (crear carpeta de resultados y asignar un ID único)
+    exp_id = experiment_setup(params, verbose=verbose)
+    exp_result_path = os.path.join(params.get('experiment_output_folder', './results'), exp_id) 
+       
     
     # PASO 1: Preparación del dataset
     if verbose:
@@ -39,6 +117,28 @@ def experiment_supres_basico (params, verbose=False):
     if verbose:
         print("PASO 3: Entrenamiento del modelo...")
     history, x_train, y_train, x_val, y_val = train_supres_model(params, model, dataset, verbose=verbose)
+    
+    # guardar el historial de entrenamiento en un archivo CSV
+    history_file = os.path.join(exp_result_path, f'training_history_{exp_id}.csv')
+    with open(history_file, mode='w', newline='') as file:
+        writer = csv.writer(file)
+        writer.writerow(['epoch'] + list(history.history.keys()))
+        for i in range(len(history.history['loss'])):
+            writer.writerow([i] + [history.history[key][i] for key in history.history.keys()])
+    
+    # guardar el modelo entrenado
+    model_file = os.path.join(exp_result_path, f'trained_model_{exp_id}.keras')
+    model.save(model_file)
+    
+    # PASO 4: Evaluación del modelo
+    if verbose:
+        print("PASO 4: Evaluación del modelo...")
+        
+    exp_img_path = os.path.join(exp_result_path, f'images_{exp_id}')
+    os.makedirs(exp_img_path, exist_ok=True)
+        
+    # metricas (TODO: debería ser un parámetro de entrada)
+    metrics_list=['mssim', 'psnr', 'mse']
         
     # Predicciones del modelo sobre el conjunto de validación
     y_pred = model.predict(x_val)
@@ -48,42 +148,68 @@ def experiment_supres_basico (params, verbose=False):
     inputs_set = (x_val * 255).astype(np.uint8)
     predictions_set = (y_pred * 255).astype(np.uint8)
     
-    # Comparativas: se toma las imágenes de entrada y se las agranda utilizando técnicas tradicionales
+    # Cálculo de métricas comparando orginales y predicciones del modelo
+    predict_metrics = evaluate_metrics(originals_set, predictions_set, metrics_list=metrics_list)
+    metrics_to_csv(predict_metrics, metrics_list=metrics_list, filename='metrics_predict.csv', path=exp_result_path) 
+    predict_means = {metric: np.mean([result[i] for result in predict_metrics]) for i, metric in enumerate(metrics_list)}
+    predict_variances = {metric: np.var([result[i] for result in predict_metrics]) for i, metric in enumerate(metrics_list)}
+    
+    # Armar un dataframe con media y varianza
+    # La fila es cada método y las columnas son las métricas (media y varianza)
+    results_summary_header = ['method'] + [f"{metric}_mean" for metric in metrics_list] + [f"{metric}_var" for metric in metrics_list]
+    results_summary = [['predict'] + [predict_means[metric] for metric in metrics_list] + [predict_variances[metric] for metric in metrics_list]]
+    scores, ssim_maps = ssim_maps_calculate(originals_set, predictions_set)
+    predict_ssim_map_rgb = images_ssim_map(ssim_maps, save_to=None, mode='rgb')
+    images_save(os.path.join(exp_img_path,'originals'), originals_set, mode='rgb')
+    images_save(os.path.join(exp_img_path,'predicts'), inputs_set, mode='rgb')
+    images_save(os.path.join(exp_img_path,'predicts_ssim_maps'), predict_ssim_map_rgb, mode='rgb')
+    
+    # Comparativas: se calculan las métricas del original vs el redimensionado con diferentes métodos de interpolación.
     shape = originals_set[0].shape
-    bilineal_set = images_resize(inputs_set, shape[0], shape[1], interpolation='bilinear')
-    bicubic_set = images_resize(inputs_set, shape[0], shape[1], interpolation='bicubic')
-    nearest_set = images_resize(inputs_set, shape[0], shape[1], interpolation='nearest')
-    
-    # PASO 4: Evaluación del modelo
-    if verbose:
-        print("PASO 4: Evaluación del modelo...")
+    original_width, original_height = shape[1], shape[0] #TODO: revisar orden
+    print(f"Original Image Shape: {shape} (Width: {original_width}, Height: {original_height})")    
+
+    interpolation_methods = ['bicubic', 'bilinear', 'nearest']
+    for method in interpolation_methods:
         
-    metrics_list = ['mssim', 'psnr', 'mse']
-    predict_results = evaluate_metrics(originals_set, predictions_set, metrics_list=metrics_list)
-    bilinear_results = evaluate_metrics(originals_set, bilineal_set, metrics_list=metrics_list)
-    bicubic_results = evaluate_metrics(originals_set, bicubic_set, metrics_list=metrics_list)
-    nearest_results = evaluate_metrics(originals_set, nearest_set, metrics_list=metrics_list)
-    
-    predict_means = {metric: np.mean([result[i] for result in predict_results]) for i, metric in enumerate(metrics_list)}
-    bilinear_means = {metric: np.mean([result[i] for result in bilinear_results]) for i, metric in enumerate(metrics_list)}
-    bicubic_means = {metric: np.mean([result[i] for result in bicubic_results]) for i, metric in enumerate(metrics_list)}
-    nearest_means = {metric: np.mean([result[i] for result in nearest_results]) for i, metric in enumerate(metrics_list)}
-    
-    # print means 
-    if verbose:
-        print("Resultados de evaluación:")
-        print(f"Predicciones del modelo: {predict_means}")
-        print(f"Agradado bilineal: {bilinear_means}")
-        print(f"Agradado bicúbico: {bicubic_means}")
-        print(f"Agradado vecino más cercano: {nearest_means}")
+        if verbose:
+            print(f"Evaluando método de comparación: {method}...")
         
+        resized_set = experiment_resize(inputs_set, original_height, original_width, method=method)
+        
+        # Calcular métricas para cada método de redimencionamiento
+        method_metric = evaluate_metrics(originals_set, resized_set, metrics_list=metrics_list)
+        
+        # Guardar results en csv con el indice de la imágen en la primera columna
+        metrics_to_csv(method_metric, metrics_list=metrics_list, filename=f'metrics_{method}.csv', path=exp_result_path)
+        
+        # Calcular la media y varianza de cada métrica para cada método
+        method_means = {metric: np.mean([result[i] for result in method_metric]) for i, metric in enumerate(metrics_list)}
+        method_variances = {metric: np.var([result[i] for result in method_metric]) for i, metric in enumerate(metrics_list)}
+        results_summary.append([method] + [method_means[metric] for metric in metrics_list] + [method_variances[metric] for metric in metrics_list])
+        
+        # Calcular mapas de similitud estructural (SSIM) para cada método y guardarlos en la carpeta de resultados
+        scores, ssim_maps = ssim_maps_calculate(originals_set, resized_set)
+        method_ssim_map_rgb = images_ssim_map(ssim_maps, save_to=None, mode='rgb')
+        images_save(os.path.join(exp_img_path, method), resized_set, mode='rgb')                
+        images_save(os.path.join(exp_img_path, f'ssim_map_{method}'), method_ssim_map_rgb, mode='rgb')
+        
+    # Guardar el resumen de resultados en un archivo CSV
+    with open(os.path.join(exp_result_path, 'results_summary.csv'), mode='w', newline='') as file:
+        writer = csv.writer(file)
+        writer.writerow(results_summary_header)
+        for row in results_summary:
+            writer.writerow(row) 
+            
     return {
-        'history': history,
-        'predict_results': predict_results,
-        'bilinear_results': bilinear_results,
-        'bicubic_results': bicubic_results,
-        'nearest_results': nearest_results
-    }
+        'experiment_id': exp_id,
+        'results_summary': results_summary,
+        'results_summary_header': results_summary_header,
+        'predict_metrics': predict_metrics,
+        'predict_means': predict_means,
+        'predict_variances': predict_variances
+    }     
+            
     
 import json        
     
@@ -92,19 +218,24 @@ if __name__ == "__main__":
     params = {
         'dataset_type': 'load',
         'dataset_path': './ds/ds_xray_1024',
-        'dataset_count': 10000,
+        'dataset_count': 100,
         'model_architecture': 'conv0',
         'optimizer': 'adam',
         'learning_rate': 0.001,
         'loss_function': 'mse',
         'train_shuffle': False,
         'train_batch_size': 32,
-        'train_epochs': 20,
+        'train_epochs': 2,
         'train_ratio': 0.8,
         'input_size': 128,
         'input_channels': 3,
         'output_size': 256,
-        'input_interpolation_method': 'bicubic'
+        'input_interpolation_method': 'bicubic', 
+        'experiment_tag': 'dev',
+        'experiment_id': 'dev_000000',
+        'experiment_type': 'experiment_supres_basico',
+        'experiment_output_folder': './results',
+        'experiment_description': 'Experimento de super resolución con modelo conv0 y dataset de rayos X'        
     }
     
     results = experiment_supres_basico(params, verbose=True)
