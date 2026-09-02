@@ -10,10 +10,10 @@ import os
 
 from data import dataset_factory
 from models import models_factory
-from train import train_supres_model
+from train import DatasetIterator, train_supres_model
 from eval import evaluate_metrics
 from img import images_resize, images_save
-from img_ssim_map import ssim_maps_calculate, images_ssim_map
+from img_ssim_map import ssim_maps_calculate, images_ssim_map, plot_ssim_map
 import numpy as np
 import os
 import csv
@@ -101,7 +101,6 @@ def experiment_supres_basico (params, verbose=False):
     # PASO 0: Preparación del experimento (crear carpeta de resultados y asignar un ID único)
     exp_id = experiment_setup(params, verbose=verbose)
     exp_result_path = os.path.join(params.get('experiment_output_folder', './results'), exp_id) 
-       
     
     # PASO 1: Preparación del dataset
     if verbose:
@@ -141,11 +140,12 @@ def experiment_supres_basico (params, verbose=False):
     metrics_list=['mssim', 'psnr', 'mse']
         
     # Predicciones del modelo sobre el conjunto de validación
-    y_pred = model.predict(x_val)
+    predict_gen = DatasetIterator(x_val, batch_size=params.get('predict_batch_size', params.get('train_batch_size', 32)))
+    y_pred = model.predict(predict_gen)
     
-    # Desnormalizar las imágenes de salida y de validación si es necesario
-    originals_set = (y_val * 255).astype(np.uint8)  # desnormalizar las imágenes de validación
-    inputs_set = (x_val * 255).astype(np.uint8)
+    # Las referencias y entradas permanecen en uint8; sólo la salida del modelo se desnormaliza.
+    originals_set = y_val
+    inputs_set = x_val
     predictions_set = (y_pred * 255).astype(np.uint8)
     
     # Cálculo de métricas comparando orginales y predicciones del modelo
@@ -158,10 +158,10 @@ def experiment_supres_basico (params, verbose=False):
     # La fila es cada método y las columnas son las métricas (media y varianza)
     results_summary_header = ['method'] + [f"{metric}_mean" for metric in metrics_list] + [f"{metric}_var" for metric in metrics_list]
     results_summary = [['predict'] + [predict_means[metric] for metric in metrics_list] + [predict_variances[metric] for metric in metrics_list]]
-    scores, ssim_maps = ssim_maps_calculate(originals_set, predictions_set)
+    scores, ssim_maps = ssim_maps_calculate(originals_set[:3], predictions_set[:3])
     predict_ssim_map_rgb = images_ssim_map(ssim_maps, save_to=None, mode='rgb')
-    images_save(os.path.join(exp_img_path,'originals'), originals_set, mode='rgb')
-    images_save(os.path.join(exp_img_path,'predicts'), inputs_set, mode='rgb')
+    images_save(os.path.join(exp_img_path,'originals'), originals_set[:3], mode='rgb')
+    images_save(os.path.join(exp_img_path,'predicts'), predictions_set[:3], mode='rgb')
     images_save(os.path.join(exp_img_path,'predicts_ssim_maps'), predict_ssim_map_rgb, mode='rgb')
     
     # Comparativas: se calculan las métricas del original vs el redimensionado con diferentes métodos de interpolación.
@@ -189,10 +189,11 @@ def experiment_supres_basico (params, verbose=False):
         results_summary.append([method] + [method_means[metric] for metric in metrics_list] + [method_variances[metric] for metric in metrics_list])
         
         # Calcular mapas de similitud estructural (SSIM) para cada método y guardarlos en la carpeta de resultados
-        scores, ssim_maps = ssim_maps_calculate(originals_set, resized_set)
+        scores, ssim_maps = ssim_maps_calculate(originals_set[:3], resized_set[:3])
         method_ssim_map_rgb = images_ssim_map(ssim_maps, save_to=None, mode='rgb')
-        images_save(os.path.join(exp_img_path, method), resized_set, mode='rgb')                
-        images_save(os.path.join(exp_img_path, f'ssim_map_{method}'), method_ssim_map_rgb, mode='rgb')
+        images_save(os.path.join(exp_img_path, method), resized_set[:3], mode='rgb')
+        images_save(os.path.join(exp_img_path, f'{method}_ssim_map'), method_ssim_map_rgb, mode='rgb')
+        
         
     # Guardar el resumen de resultados en un archivo CSV
     with open(os.path.join(exp_result_path, 'results_summary.csv'), mode='w', newline='') as file:
@@ -218,21 +219,21 @@ if __name__ == "__main__":
     params = {
         'dataset_type': 'load',
         'dataset_path': './ds/ds_xray_1024',
-        'dataset_count': 100,
+        'dataset_count': 100000,
         'model_architecture': 'conv0',
         'optimizer': 'adam',
         'learning_rate': 0.001,
         'loss_function': 'mse',
         'train_shuffle': False,
         'train_batch_size': 32,
-        'train_epochs': 2,
+        'train_epochs': 20,
         'train_ratio': 0.8,
         'input_size': 128,
         'input_channels': 3,
         'output_size': 256,
         'input_interpolation_method': 'bicubic', 
-        'experiment_tag': 'dev',
-        'experiment_id': 'dev_000000',
+        'experiment_tag': 'sp',
+        'experiment_id': 'sp_000000',
         'experiment_type': 'experiment_supres_basico',
         'experiment_output_folder': './results',
         'experiment_description': 'Experimento de super resolución con modelo conv0 y dataset de rayos X'        

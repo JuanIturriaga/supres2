@@ -22,7 +22,7 @@ def dataset_load(params, verbose=False):
     if dataset_shape is not None:
         dim = (dataset_shape[0], dataset_shape[1])
         if dataset_shape[2] == 3:
-            mode = 'color'
+            mode = 'rgb'
         elif dataset_shape[2] == 1:
             mode = 'grayscale'
         else:
@@ -32,7 +32,7 @@ def dataset_load(params, verbose=False):
         dim = (output_size, output_size)
         output_channels = params.get('output_channels', 3)
         if output_channels == 3:
-            mode = 'color'  # Default mode if dataset_shape is not provided
+            mode = 'rgb'  # Default mode if dataset_shape is not provided
         elif output_channels == 1:
             mode = 'grayscale'
         else:
@@ -47,7 +47,9 @@ def dataset_load(params, verbose=False):
     if path is None:
         raise ValueError("El parámetro 'dataset_path' es obligatorio.")
     
-    images = images_load(path, max_images=max_images, recursive=True, dim=dim, verbose=verbose)
+    params['dataset_mode'] = mode
+    
+    images = images_load(path, mode=mode, max_images=max_images, recursive=True, dim=dim, verbose=verbose)
     return images
 
 def dataset_random_textures(params, verbose=False):

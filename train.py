@@ -13,7 +13,7 @@ from img import images_resize, images_blur
 
 # AUX: clase iteradora para evitar problema de memoria
 class DatasetIterator(Sequence):
-    def __init__(self, x_set, y_set, batch_size):
+    def __init__(self, x_set, y_set=None, batch_size=32):
         self.x = x_set
         self.y = y_set
         self.batch_size = batch_size
@@ -25,8 +25,11 @@ class DatasetIterator(Sequence):
     def __getitem__(self, idx):
         # Extrae exactamente <batch_size> imágenes de la RAM y las prepara
         batch_x = self.x[idx * self.batch_size:(idx + 1) * self.batch_size]
+        normalized_x = batch_x.astype(np.float32) / 255.0
+        if self.y is None:
+            return normalized_x
         batch_y = self.y[idx * self.batch_size:(idx + 1) * self.batch_size]
-        return batch_x, batch_y
+        return normalized_x, batch_y.astype(np.float32) / 255.0
 
 
 def generate_input(params, dataset_output):
@@ -88,12 +91,6 @@ def train_supres_model(params, model, dataset, verbose=False):
     # Reduce el tamaño al tamaño del input o si el input es igual al output lo blurea para simular baja resolución
     x_train = generate_input(params, y_train)
     x_val = generate_input(params, y_val)
-    
-    # Normaliza los datos de entrada y salida a [0, 1] para el entrenamiento
-    x_train = x_train / 255.0
-    y_train = y_train / 255.0
-    x_val = x_val / 255.0
-    y_val = y_val / 255.0    
     
     # Configura los parámetros de entrenamiento
     batch_size = params.get('train_batch_size', 32)
