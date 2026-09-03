@@ -17,6 +17,9 @@ from img_ssim_map import ssim_maps_calculate, images_ssim_map, plot_ssim_map
 import numpy as np
 import os
 import csv
+import subprocess
+import tensorflow as tf
+from datetime import datetime
 
 def experiment_setup (params, verbose=False):
     """Escanea la carpeta de resultados buscando un nuevo id para el experimento
@@ -31,7 +34,7 @@ def experiment_setup (params, verbose=False):
        
     output_folder = params.get('experiment_output_folder', './results')
     tag = params.get('experiment_tag', 'supres')
-    
+        
     if not os.path.exists(output_folder):
         os.makedirs(output_folder)
         print(f"Creando carpeta de resultados: {output_folder}")
@@ -85,6 +88,49 @@ def metrics_to_csv(results, metrics_list, filename, path= './'):
         writer.writerow(['image_index'] + metrics_list)
         for i, result in enumerate(results):
             writer.writerow([i] + result)
+            
+def gpu_info():
+    """
+    Obtiene información sobre la GPU disponible en el sistema.
+
+    tf.config.experimental.get_device_details() no expone memoria total/libre,
+    por lo que se consulta nvidia-smi; si no está disponible se usa
+    tf.config.experimental.get_memory_info() (sólo memoria en uso por TF).
+
+    Returns:
+        str: Información sobre la GPU, incluyendo nombre, memoria total y memoria libre.
+    """
+    gpus = tf.config.experimental.list_physical_devices('GPU')
+    if not gpus:
+        return "No GPU available."
+
+    try:
+        smi_output = subprocess.check_output(
+            ['nvidia-smi', '--query-gpu=name,memory.total,memory.used,memory.free',
+             '--format=csv,noheader,nounits'],
+            encoding='utf-8', timeout=5
+        )
+        gpu_info = []
+        for line in smi_output.strip().splitlines():
+            name, mem_total, mem_used, mem_free = [v.strip() for v in line.split(',')]
+            gpu_info.append(
+                f"GPU: {name}, Memory Total: {float(mem_total):.2f} MB, "
+                f"Memory Used: {float(mem_used):.2f} MB, Memory Free: {float(mem_free):.2f} MB"
+            )
+        return "\n".join(gpu_info)
+    except (FileNotFoundError, subprocess.SubprocessError, ValueError):
+        gpu_info = []
+        for i, gpu in enumerate(gpus):
+            details = tf.config.experimental.get_device_details(gpu)
+            name = details.get('device_name', 'Unknown GPU')
+            try:
+                mem = tf.config.experimental.get_memory_info(f'GPU:{i}')
+                current_mb = mem.get('current', 0) / (1024 ** 2)
+                peak_mb = mem.get('peak', 0) / (1024 ** 2)
+                gpu_info.append(f"GPU: {name}, Memory In Use: {current_mb:.2f} MB, Peak: {peak_mb:.2f} MB")
+            except Exception:
+                gpu_info.append(f"GPU: {name}, Memory info unavailable (nvidia-smi not found).")
+        return "\n".join(gpu_info)
 
 def experiment_supres_basico (params, verbose=False):
     """
@@ -99,23 +145,40 @@ def experiment_supres_basico (params, verbose=False):
     """
     
     # PASO 0: Preparación del experimento (crear carpeta de resultados y asignar un ID único)
+    start_time = datetime.now()    
+    params['experiment_start_time'] = start_time.strftime("%Y-%m-%d %H:%M:%S.%f")
+        
     exp_id = experiment_setup(params, verbose=verbose)
     exp_result_path = os.path.join(params.get('experiment_output_folder', './results'), exp_id) 
     
+    params['experiment_id'] = exp_id
+    params['experiment_output_folder'] = exp_result_path
+    
+    #obtener datos de la placa de video 
+    params['gpu_info'] = gpu_info()
+    
+    
     # PASO 1: Preparación del dataset
+    start_time_dataset = datetime.now()
     if verbose:
-        print("PASO 1: Preparación del dataset...")
+        print(f"PASO 1 ({start_time_dataset.strftime('%Y-%m-%d %H:%M:%S.%f')}): Preparación del dataset...")
     dataset = dataset_factory(params, verbose=verbose)
+    end_time_dataset = datetime.now()
+    params['dataset_time'] = (end_time_dataset - start_time_dataset).total_seconds()
     
     # PASO 2: Creación del modelo
+    start_time_model = datetime.now()
     if verbose:
-        print("PASO 2: Creación del modelo...")
+        print(f"PASO 2 ({start_time_model.strftime('%Y-%m-%d %H:%M:%S.%f')}): Creación del modelo...")
     model = models_factory(params, verbose=verbose)
     
     # PASO 3: Entrenamiento del modelo
+    start_time_train = datetime.now()
     if verbose:
-        print("PASO 3: Entrenamiento del modelo...")
+        print(f"PASO 3 ({start_time_train.strftime('%Y-%m-%d %H:%M:%S.%f')}): Entrenamiento del modelo...")
     history, x_train, y_train, x_val, y_val = train_supres_model(params, model, dataset, verbose=verbose)
+    end_time_train = datetime.now()
+    params['train_time'] = (end_time_train - start_time_train).total_seconds()    
     
     # guardar el historial de entrenamiento en un archivo CSV
     history_file = os.path.join(exp_result_path, f'training_history_{exp_id}.csv')
@@ -140,6 +203,9 @@ def experiment_supres_basico (params, verbose=False):
     metrics_list=['mssim', 'psnr', 'mse']
         
     # Predicciones del modelo sobre el conjunto de validación
+    tf.keras.backend.clear_session()
+    #cargar el modelo entrenado
+    model = tf.keras.models.load_model(model_file, compile=False)
     predict_gen = DatasetIterator(x_val, batch_size=params.get('predict_batch_size', params.get('train_batch_size', 32)))
     y_pred = model.predict(predict_gen)
     
@@ -209,17 +275,16 @@ def experiment_supres_basico (params, verbose=False):
         'predict_metrics': predict_metrics,
         'predict_means': predict_means,
         'predict_variances': predict_variances
-    }     
-            
+    }                 
     
 import json        
     
 if __name__ == "__main__":
     # Ejemplo de uso de la función experiment_supres_basico
     params = {
-        'dataset_type': 'load',
+        'dataset_type': 'random_shapes',
         'dataset_path': './ds/ds_xray_1024',
-        'dataset_count': 100000,
+        'dataset_count': 20000,
         'model_architecture': 'conv0',
         'optimizer': 'adam',
         'learning_rate': 0.001,
@@ -232,16 +297,18 @@ if __name__ == "__main__":
         'input_channels': 3,
         'output_size': 256,
         'input_interpolation_method': 'bicubic', 
-        'experiment_tag': 'sp',
+        'experiment_tag': 'sp_random_shapes',
         'experiment_id': 'sp_000000',
         'experiment_type': 'experiment_supres_basico',
         'experiment_output_folder': './results',
-        'experiment_description': 'Experimento de super resolución con modelo conv0 y dataset de rayos X'        
+        'experiment_description': 'Experimento de super resolución con modelo conv0 y dataset formas aleatorias'        
     }
     
     results = experiment_supres_basico(params, verbose=True)
     
+    experiment_folder = params.get('experiment_output_folder', './results')
+        
     #save params as json 
-    with open('params.json', 'w') as f:
+    with open(os.path.join(experiment_folder, 'params.json'), 'w') as f:
         json.dump(params, f)
     
