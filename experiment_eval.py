@@ -3,7 +3,7 @@ Función para correr experimentos de super resolución según los parámetros de
 Los paso básicos son: 
     PASO 1: Preparación del dataset (cargar o crear dataset)
     PASO 2: Creación del modelo (crear o cargar modelo)
-    PASO 3: Entrenamiento del modelo (entrenar el modelo con los datos de entrenamiento y validación)
+    PASO 3: No se entrena, se usa un modelo preentrenado (cargar modelo entrenado)
     PASO 4: Evaluación del modelo (evaluar el modelo con los datos de prueba y calcular métricas)
 """
 import os
@@ -172,21 +172,13 @@ def experiment_supres_basico (params, verbose=False):
         print(f"PASO 2 ({start_time_model.strftime('%Y-%m-%d %H:%M:%S.%f')}): Creación del modelo...")
     model = models_factory(params, verbose=verbose)
     
-    # PASO 3: Entrenamiento del modelo
-    start_time_train = datetime.now()
+    # PASO 3: Recrea los datos de validación a partir del dataset y los parámetros de entrada
+    from train import generate_input
     if verbose:
-        print(f"PASO 3 ({start_time_train.strftime('%Y-%m-%d %H:%M:%S.%f')}): Entrenamiento del modelo...")
-    history, x_train, y_train, x_val, y_val = train_supres_model(params, model, dataset, verbose=verbose)
-    end_time_train = datetime.now()
-    params['train_time'] = (end_time_train - start_time_train).total_seconds()    
-    
-    # guardar el historial de entrenamiento en un archivo CSV
-    history_file = os.path.join(exp_result_path, f'training_history_{exp_id}.csv')
-    with open(history_file, mode='w', newline='') as file:
-        writer = csv.writer(file)
-        writer.writerow(['epoch'] + list(history.history.keys()))
-        for i in range(len(history.history['loss'])):
-            writer.writerow([i] + [history.history[key][i] for key in history.history.keys()])
+        print("PASO 3: Preparación de los datos de validación...")
+    ratio = params.get('train_ratio', 0.8)
+    y_val = dataset[int(len(dataset) * ratio):]
+    x_val = generate_input(params, y_val)
     
     # guardar el modelo entrenado
     model_file = os.path.join(exp_result_path, f'trained_model_{exp_id}.keras')
@@ -204,62 +196,72 @@ def experiment_supres_basico (params, verbose=False):
         
     # Predicciones del modelo sobre el conjunto de validación
     tf.keras.backend.clear_session()
-    #cargar el modelo entrenado
+    # cargar el modelo entrenado
     model = tf.keras.models.load_model(model_file, compile=False)
-    predict_gen = DatasetIterator(x_val, batch_size=params.get('predict_batch_size', params.get('train_batch_size', 32)))
-    y_pred = model.predict(predict_gen)
+    # batch de predicción menor al de entrenamiento por defecto: conv2d_transpose necesita más memoria de workspace en inferencia y puede provocar OOM con el mismo batch_size usado en entrenamiento.
+    batch_size_predict = params.get('batch_size', 8)
+    predict_gen = DatasetIterator(x_val, batch_size=batch_size_predict)
+    original_gen = DatasetIterator(y_val, batch_size=batch_size_predict)
+    inputs_gen = DatasetIterator(x_val, batch_size=batch_size_predict)
     
-    # Las referencias y entradas permanecen en uint8; sólo la salida del modelo se desnormaliza.
-    originals_set = y_val
-    inputs_set = x_val
-    predictions_set = (y_pred * 255).astype(np.uint8)
+    interpolation_methods = ['bicubic', 'bilinear', 'nearest']
     
-    # Cálculo de métricas comparando orginales y predicciones del modelo
-    predict_metrics = evaluate_metrics(originals_set, predictions_set, metrics_list=metrics_list)
-    metrics_to_csv(predict_metrics, metrics_list=metrics_list, filename='metrics_predict.csv', path=exp_result_path) 
+    predict_metrics = []
+    results_summary = []
+    
+    original_height, original_width = y_val.shape[1], y_val.shape[2]
+    
+    
+    
+    for i, batch in enumerate(predict_gen):
+        if verbose:
+            print(f"Prediciendo batch {i+1}/{len(predict_gen)}...")
+        pred_batch = model.predict(batch)
+        original_batch = original_gen[i]
+        input_batch = inputs_gen[i]
+              
+    
+        # Cálculo de métricas comparando orginales y predicciones del modelo
+        originals_set = original_batch
+        predictions_set = (pred_batch * 255).astype(np.uint8)
+        
+        predict_metrics_batch = evaluate_metrics(originals_set, predictions_set, metrics_list=metrics_list)
+        predict_metrics.extend(predict_metrics_batch)
+            
+        for i, method in enumerate(interpolation_methods):
+                
+            if verbose:
+                print(f"Evaluando método de comparación: {method}...")
+            
+            resized_set = experiment_resize(input_batch, original_height, original_width, method=method)
+            
+            # Calcular métricas para cada método de redimencionamiento
+            if 'method_metric' not in locals():
+                method_metric = [None] * len(interpolation_methods)
+            method_metric[i] = evaluate_metrics(originals_set, resized_set, metrics_list=metrics_list)
+            
+            
+            
+    
     predict_means = {metric: np.mean([result[i] for result in predict_metrics]) for i, metric in enumerate(metrics_list)}
     predict_variances = {metric: np.var([result[i] for result in predict_metrics]) for i, metric in enumerate(metrics_list)}
+    metrics_to_csv(predict_metrics, metrics_list=metrics_list, filename='metrics_predict.csv', path=exp_result_path) 
+    
     
     # Armar un dataframe con media y varianza
     # La fila es cada método y las columnas son las métricas (media y varianza)
     results_summary_header = ['method'] + [f"{metric}_mean" for metric in metrics_list] + [f"{metric}_var" for metric in metrics_list]
     results_summary = [['predict'] + [predict_means[metric] for metric in metrics_list] + [predict_variances[metric] for metric in metrics_list]]
-    scores, ssim_maps = ssim_maps_calculate(originals_set[:3], predictions_set[:3])
-    predict_ssim_map_rgb = images_ssim_map(ssim_maps, save_to=None, mode='rgb')
-    images_save(os.path.join(exp_img_path,'originals'), originals_set[:3], mode='rgb')
-    images_save(os.path.join(exp_img_path,'predicts'), predictions_set[:3], mode='rgb')
-    images_save(os.path.join(exp_img_path,'predicts_ssim_maps'), predict_ssim_map_rgb, mode='rgb')
     
-    # Comparativas: se calculan las métricas del original vs el redimensionado con diferentes métodos de interpolación.
-    shape = originals_set[0].shape
-    original_width, original_height = shape[1], shape[0] #TODO: revisar orden
-    print(f"Original Image Shape: {shape} (Width: {original_width}, Height: {original_height})")    
-
-    interpolation_methods = ['bicubic', 'bilinear', 'nearest']
-    for method in interpolation_methods:
-        
-        if verbose:
-            print(f"Evaluando método de comparación: {method}...")
-        
-        resized_set = experiment_resize(inputs_set, original_height, original_width, method=method)
-        
-        # Calcular métricas para cada método de redimencionamiento
-        method_metric = evaluate_metrics(originals_set, resized_set, metrics_list=metrics_list)
-        
+    for i, method in enumerate(interpolation_methods):
         # Guardar results en csv con el indice de la imágen en la primera columna
-        metrics_to_csv(method_metric, metrics_list=metrics_list, filename=f'metrics_{method}.csv', path=exp_result_path)
+        metrics_to_csv(method_metric[i], metrics_list=metrics_list, filename=f'metrics_{method}.csv', path=exp_result_path)
         
         # Calcular la media y varianza de cada métrica para cada método
         method_means = {metric: np.mean([result[i] for result in method_metric]) for i, metric in enumerate(metrics_list)}
         method_variances = {metric: np.var([result[i] for result in method_metric]) for i, metric in enumerate(metrics_list)}
         results_summary.append([method] + [method_means[metric] for metric in metrics_list] + [method_variances[metric] for metric in metrics_list])
-        
-        # Calcular mapas de similitud estructural (SSIM) para cada método y guardarlos en la carpeta de resultados
-        scores, ssim_maps = ssim_maps_calculate(originals_set[:3], resized_set[:3])
-        method_ssim_map_rgb = images_ssim_map(ssim_maps, save_to=None, mode='rgb')
-        images_save(os.path.join(exp_img_path, method), resized_set[:3], mode='rgb')
-        images_save(os.path.join(exp_img_path, f'{method}_ssim_map'), method_ssim_map_rgb, mode='rgb')
-        
+    
         
     # Guardar el resumen de resultados en un archivo CSV
     with open(os.path.join(exp_result_path, 'results_summary.csv'), mode='w', newline='') as file:
@@ -285,7 +287,8 @@ if __name__ == "__main__":
         'dataset_type': 'random_shapes',
         'dataset_path': './ds/ds_xray_1024',
         'dataset_count': 100000,
-        'model_architecture': 'conv0',
+        'model_architecture': 'load',
+        'model_file': './results/sp_random_shapes_000001/trained_model_sp_random_shapes_000001.keras',
         'optimizer': 'adam',
         'learning_rate': 0.001,
         'loss_function': 'mse',
